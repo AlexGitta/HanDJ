@@ -15,6 +15,10 @@ const lowPassFilter2 = new Tone.Filter(20000, "lowpass").toDestination();
 const midPassFilter2 = new Tone.Filter(1000, "bandpass").toDestination();
 const highPassFilter2 = new Tone.Filter(20000, "highpass").toDestination();
 
+// Create volume nodes for each player
+const volumeNode1 = new Tone.Volume(0).toDestination();
+const volumeNode2 = new Tone.Volume(0).toDestination();
+
 
 const player1 = new Tone.Player({
   url: "tracks/flimAphexTwin.mp3",
@@ -24,7 +28,7 @@ const player1 = new Tone.Player({
   onerror: (error) => {
     console.error("Error loading Player 1:", error);
   }
-}).connect(lowPassFilter1).connect(midPassFilter1).connect(highPassFilter1);
+}).connect(lowPassFilter1).connect(midPassFilter1).connect(highPassFilter1).connect(volumeNode1);
 
 const player2 = new Tone.Player({
   url: "tracks/yourLoveProdigy.mp3",
@@ -34,7 +38,7 @@ const player2 = new Tone.Player({
   onerror: (error) => {
     console.error("Error loading Player 2:", error);
   }
-}).connect(lowPassFilter2).connect(midPassFilter2).connect(highPassFilter2);
+}).connect(lowPassFilter2).connect(midPassFilter2).connect(highPassFilter2).connect(volumeNode2);
 
 
 let isPlayer1Playing = false;
@@ -114,6 +118,17 @@ function applyFilters(lowPassFilter, midPassFilter, highPassFilter, poses) {
   highPassFilter.frequency.value = !poses.ringFingerUp ? 20000 : 0;
 }
 
+function adjustVolume(volumeNode, landmarks) {
+  const wristY = landmarks[0].y; // Get the wrist's y-position
+  const normalizedY = Math.min(Math.max(wristY, 0), 1); // Clamp value between 0 and 1
+
+  // Map the y-position to volume (-60 dB at the bottom, 0 dB at the top)
+  const volume = -60 + (1 - normalizedY) * 60;
+
+  volumeNode.volume.value = volume;
+
+  console.log(`Volume adjusted: ${volume.toFixed(2)} dB`);
+}
   
 function onResults(results) {
   canvasCtx.save();
@@ -183,9 +198,11 @@ function onResults(results) {
             }
           }
         if (handData.label === 'Left') {
+          adjustVolume(volumeNode2, landmarks);
           applyFilters(lowPassFilter2, midPassFilter2, highPassFilter2, poses);
         }
         else {
+          adjustVolume(volumeNode1, landmarks);
           applyFilters(lowPassFilter1, midPassFilter1, highPassFilter1, poses);
         }
       });
