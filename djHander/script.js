@@ -19,35 +19,70 @@ const highPassFilter2 = new Tone.Filter(20000, "highpass").toDestination();
 const volumeNode1 = new Tone.Volume(0).toDestination();
 const volumeNode2 = new Tone.Volume(0).toDestination();
 
+// Create reverb effects for each player
+const reverb1 = new Tone.Reverb({decay: 20, wet: 0.9}).toDestination();
+const reverb2 = new Tone.Reverb({decay: 20, wet: 0.9}).toDestination();
+reverb1.name = "reverb1"
+reverb2.name = "reverb2"
+let reverb1Enabled = false;
+let reverb2Enabled = false;
+
+const tracks1 = ["tracksUKMIX/Footsie-HitIt.mp3", "tracksUKMIX/JoyOrbison-flightfm.mp3", "tracksUKMIX/Kahn-Dread(GorgonSoundVersion).mp3"];
+const tracks2 = ["tracksUKMIX/Slimzee-MileEnd(ZeroRemix).mp3", "tracksUKMIX/TheProdigy-Omen.mp3", "tracksUKMIX/Hamdi-Skanka(NikkiNairRemix).mp3"];
+let currentTrackIndex1 = 0;
+let currentTrackIndex2 = 0;
 
 const player1 = new Tone.Player({
-  url: "tracks/flimAphexTwin.mp3",
-  onload: () => {
-    console.log("Player 1 loaded");
-  },
-  onerror: (error) => {
-    console.error("Error loading Player 1:", error);
-  }
-}).connect(lowPassFilter1).connect(midPassFilter1).connect(highPassFilter1).connect(volumeNode1);
-
-const player2 = new Tone.Player({
-  url: "tracks/yourLoveProdigy.mp3",
-  onload: () => {
-    console.log("Player 2 loaded");
-  },
-  onerror: (error) => {
-    console.error("Error loading Player 2:", error);
-  }
-}).connect(lowPassFilter2).connect(midPassFilter2).connect(highPassFilter2).connect(volumeNode2);
-
+    url: tracks1[currentTrackIndex1],
+    onload: () => {
+      console.log("Player 1 loaded");
+      updateTrackName(1, tracks1[currentTrackIndex1]);
+    },
+    onerror: (error) => {
+      console.error("Error loading Player 1:", error);
+    },
+    onstop: () => {
+      
+    }
+  }).connect(reverb1).connect(lowPassFilter1).connect(midPassFilter1).connect(highPassFilter1).connect(volumeNode1);
+  
+  const player2 = new Tone.Player({
+    url: tracks2[currentTrackIndex2],
+    onload: () => {
+      console.log("Player 2 loaded");
+      updateTrackName(2, tracks2[currentTrackIndex2]);
+    },
+    onerror: (error) => {
+      console.error("Error loading Player 2:", error);
+    },
+    onstop: () => {
+      
+    }
+  }).connect(reverb2).connect(lowPassFilter2).connect(midPassFilter2).connect(highPassFilter2).connect(volumeNode2);
 
 let isPlayer1Playing = false;
 let isPlayer2Playing = false;
 let wasHand1Closed = false;
 let wasHand2Closed = false;
+let wasThumbIn1 = false;
+let wasThumbIn2 = false;
+
+function changeTrack(player, tracks, currentTrackIndex, handLabel) {
+    currentTrackIndex = (currentTrackIndex + 1)
+    if (currentTrackIndex >= tracks.length) {currentTrackIndex-=tracks.length}
+    player.load(tracks[currentTrackIndex]);
+   // console.log(`${handLabel} changed to track: ${tracks[currentTrackIndex]}`);
+    
+    return currentTrackIndex;
+  }
+
+function updateTrackName(playerNumber, trackName) {
+    const trackNameElement = document.getElementById(`trackName${playerNumber}`);
+    trackNameElement.textContent = `Current Track ${playerNumber}: ${trackName}`;
+  }
 
 // Smoothing filter for landmark positions
-const smoothingFactor = 0.5;
+const smoothingFactor = 0.2;
 let previousLandmarks = {
   'Left': [],
   'Right': []
@@ -127,8 +162,41 @@ function adjustVolume(volumeNode, landmarks) {
 
   volumeNode.volume.value = volume;
 
-  console.log(`Volume adjusted: ${volume.toFixed(2)} dB`);
+  //console.log(`Volume adjusted: ${volume.toFixed(2)} dB`);
 }
+
+function calculateHorizontalMovement(currentLandmark, previousLandmark) {
+ // console.log(Math.abs(currentLandmark.x - previousLandmark.x));
+  return Math.abs(currentLandmark.x - previousLandmark.x);
+}
+
+function adjustReverbDecay(reverb, movement) {
+  const maxDecay = 20;
+  const minDecay = 0.001;
+  const decayRate = 0.1; // Rate at which reverb decay decreases
+  let decay = reverb.decay;
+
+  if (movement > 0.005) {
+    decay = Math.min(maxDecay, decay + movement * 100); // Increase decay with movement
+  } else {
+    decay = Math.max(minDecay, decay - decayRate); // Decrease decay gradually
+  }
+
+  reverb.decay = decay;
+  adjustReverbLabel(reverb, decay.toFixed(2));
+  //console.log(`Reverb decay adjusted: ${decay.toFixed(2)}`);
+}
+
+function adjustReverbLabel(reverb, reverbamt) {
+  const reverbElement = document.getElementById(`${reverb.name}`);
+  reverbElement.textContent = `Current ${reverb}: ${reverbamt}`;
+}
+
+let frameCount = 0;
+let previousWristPosition = {
+  'Left': null,
+  'Right': null
+};
   
 function onResults(results) {
   canvasCtx.save();
@@ -143,29 +211,30 @@ function onResults(results) {
     }));
 
       handsData.forEach((handData, handIndex) => {
-          const handLabel = handData.label === 'Left' ? 'Hand 1 (Right)' : 'Hand 2 (Left)';
-          const landmarks = handData.landmarks;
+        const handLabel = handData.label === 'Left' ? 'Hand 1 (Right)' : 'Hand 2 (Left)';
+        const landmarks = handData.landmarks;
 
-          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
-          drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
+        if (landmarks.length >= 18)
+        {
+          const handColour = (handData.label === 'Left' && isPlayer2Playing) || (handData.label === 'Right' && isPlayer1Playing) ? '#00FF00' : '#FF0000';
+          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: handColour, lineWidth: 5 });
+          drawLandmarks(canvasCtx, landmarks, { color: handColour, lineWidth: 2 });
 
           const poses = detectFingerPoses(landmarks);
-          if (!poses.thumbOut) {
-              console.log(`${handLabel} thumb is in`);
-          }
+
           if (!poses.indexFingerUp) {
-              console.log(`${handLabel} index finger is down`);
+            //console.log(`${handLabel} index finger is down`);
           }
           if (!poses.middleFingerUp) {
-              console.log(`${handLabel} middle finger is down`);
+            //console.log(`${handLabel} middle finger is down`);
           }
           if (!poses.ringFingerUp) {
-              console.log(`${handLabel} ring finger is down`);
+            //console.log(`${handLabel} ring finger is down`);
           }
           if (!poses.pinkyFingerUp) {
-              console.log(`${handLabel} pinky finger is down`);
+            //console.log(`${handLabel} pinky finger is down`);
           }
-          if (!poses.indexFingerUp && !poses.middleFingerUp && !poses.ringFingerUp && !poses.pinkyFingerUp) { 
+          if (!poses.indexFingerUp && !poses.middleFingerUp && !poses.ringFingerUp && !poses.pinkyFingerUp) {
             console.log(`${handLabel} all fingers down`);
             if (handData.label === 'Left') {
               if (!wasHand2Closed) {
@@ -196,17 +265,55 @@ function onResults(results) {
             } else {
               wasHand1Closed = false;
             }
+            if (!poses.thumbOut) {
+              console.log(`${handLabel} thumb is in`);
+              if (handData.label === 'Left') {
+                if (!wasThumbIn2) {
+                  currentTrackIndex2 = changeTrack(player2, tracks2, currentTrackIndex2, handLabel);
+                  wasThumbIn2 = true;
+                }
+              } else {
+                if (!wasThumbIn1) {
+                  currentTrackIndex1 = changeTrack(player1, tracks1, currentTrackIndex1, handLabel);
+                  wasThumbIn1 = true;
+                }
+              }
+            } else {
+              if (handData.label === 'Left') {
+                wasThumbIn2 = false;
+              } else {
+                wasThumbIn1 = false;
+              }
+            }
           }
-        if (handData.label === 'Left') {
-          adjustVolume(volumeNode2, landmarks);
-          applyFilters(lowPassFilter2, midPassFilter2, highPassFilter2, poses);
+          if (handData.label === 'Left') {
+            adjustVolume(volumeNode2, landmarks);
+            applyFilters(lowPassFilter2, midPassFilter2, highPassFilter2, poses);
+            if (frameCount % 3 === 0) {
+              previousWristPosition['Left'] = landmarks[0];
+            }
+            if (previousWristPosition['Left']) {
+              const movement = calculateHorizontalMovement(landmarks[0], previousWristPosition['Left']);
+              adjustReverbDecay(reverb2, movement);
+            }
+            previousLandmarks['Left'] = landmarks;
+          } else {
+            adjustVolume(volumeNode1, landmarks);
+            applyFilters(lowPassFilter1, midPassFilter1, highPassFilter1, poses);
+            if (frameCount % 3 === 0) {
+              previousWristPosition['Right'] = landmarks[0];
+            }
+            if (previousWristPosition['Right']) {
+              const movement = calculateHorizontalMovement(landmarks[0], previousWristPosition['Right']);
+              adjustReverbDecay(reverb1, movement);
+            }
+            previousLandmarks['Right'] = landmarks;
+          }
         }
-        else {
-          adjustVolume(volumeNode1, landmarks);
-          applyFilters(lowPassFilter1, midPassFilter1, highPassFilter1, poses);
-        }
-      });
+    });
+  
   }
+  frameCount++;
   canvasCtx.restore();
 }
 
