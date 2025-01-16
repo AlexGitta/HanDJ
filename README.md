@@ -1,4 +1,4 @@
-# HandTrack
+# HanDJ
 
 A Hand Tracking DJ App created using ml5js Pose Detection and tone.js
 
