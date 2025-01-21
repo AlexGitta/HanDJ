@@ -27,11 +27,14 @@ reverb2.name = "reverb2"
 let reverb1Enabled = false;
 let reverb2Enabled = false;
 
+// Add list of tracks for each player (3 tracks each)
+
 const tracks1 = ["tracksUKMIX/Footsie-HitIt.mp3", "tracksUKMIX/JoyOrbison-flightfm.mp3", "tracksUKMIX/Kahn-Dread(GorgonSoundVersion).mp3"];
 const tracks2 = ["tracksUKMIX/Slimzee-MileEnd(ZeroRemix).mp3", "tracksUKMIX/TheProdigy-Omen.mp3", "tracksUKMIX/Hamdi-Skanka(NikkiNairRemix).mp3"];
 let currentTrackIndex1 = 0;
 let currentTrackIndex2 = 0;
 
+//Create players, connect effects and filters
 const player1 = new Tone.Player({
     url: tracks1[currentTrackIndex1],
     onload: () => {
@@ -67,15 +70,15 @@ let wasHand2Closed = false;
 let wasThumbIn1 = false;
 let wasThumbIn2 = false;
 
+// Function to load next track
 function changeTrack(player, tracks, currentTrackIndex, handLabel) {
     currentTrackIndex = (currentTrackIndex + 1)
     if (currentTrackIndex >= tracks.length) {currentTrackIndex-=tracks.length}
-    player.load(tracks[currentTrackIndex]);
-   // console.log(`${handLabel} changed to track: ${tracks[currentTrackIndex]}`);
-    
+    player.load(tracks[currentTrackIndex]);   
     return currentTrackIndex;
   }
 
+// Function to update display name
 function updateTrackName(playerNumber, trackName) {
     const trackNameElement = document.getElementById(`trackName${playerNumber}`);
     trackNameElement.textContent = `Current Track ${playerNumber}: ${trackName}`;
@@ -88,6 +91,7 @@ let previousLandmarks = {
   'Right': []
 };
 
+// Function to smooth hand landmarks and make it less glitchy
 function smoothLandmarks(currentLandmarks, handLabel) {
   if (previousLandmarks[handLabel].length === 0) {
     previousLandmarks[handLabel] = currentLandmarks;
@@ -106,13 +110,14 @@ function smoothLandmarks(currentLandmarks, handLabel) {
   return smoothedLandmarks;
 }
 
-
+// Check if finger is up funciton
 function isFingerUp(landmarks, fingerIndices) {
   const [base, mcp, pip, dip, tip] = fingerIndices;
   return landmarks[tip].y < landmarks[mcp].y && landmarks[tip].y < landmarks[base].y;
 }
 
-function isThumbOut(landmarks) {  // slightly more complex logic as thumb is dependant on left or right hand
+// Check if thumb is out function
+function isThumbOut(landmarks) {  // Slightly more complex logic as thumb is dependant on left or right hand
     const thumbTip = landmarks[4];
     const indexMcp = landmarks[5];
     const middleMcp = landmarks[9];
@@ -124,7 +129,7 @@ function isThumbOut(landmarks) {  // slightly more complex logic as thumb is dep
     return Math.abs(thumbTip.x - averageX) > 0.1; 
 }
 
-
+// Function to call other functions for each finger/thumb and return bools
 function detectFingerPoses(landmarks) {
   const thumb = [0, 1, 2, 3, 4];
   const indexFinger = [0, 5, 6, 7, 8];
@@ -147,12 +152,14 @@ function detectFingerPoses(landmarks) {
   };
 }
 
+// Function to apply effects
 function applyFilters(lowPassFilter, midPassFilter, highPassFilter, poses) {
   lowPassFilter.frequency.value = !poses.indexFingerUp ? 0 : 20000;
   midPassFilter.frequency.value = !poses.middleFingerUp ? 0 : 1000;
   highPassFilter.frequency.value = !poses.ringFingerUp ? 20000 : 0;
 }
 
+// Function to adjust volume
 function adjustVolume(volumeNode, landmarks) {
   const wristY = landmarks[0].y; // Get the wrist's y-position
   const normalizedY = Math.min(Math.max(wristY, 0), 1); // Clamp value between 0 and 1
@@ -162,14 +169,14 @@ function adjustVolume(volumeNode, landmarks) {
 
   volumeNode.volume.value = volume;
 
-  //console.log(`Volume adjusted: ${volume.toFixed(2)} dB`);
 }
 
+// Calculate horizontal movement for reverb
 function calculateHorizontalMovement(currentLandmark, previousLandmark) {
- // console.log(Math.abs(currentLandmark.x - previousLandmark.x));
   return Math.abs(currentLandmark.x - previousLandmark.x);
 }
 
+// Function to control reverb
 function adjustReverbDecay(reverb, movement) {
   const maxDecay = 20;
   const minDecay = 0.001;
@@ -187,6 +194,7 @@ function adjustReverbDecay(reverb, movement) {
   //console.log(`Reverb decay adjusted: ${decay.toFixed(2)}`);
 }
 
+// Adjust reverb text on page
 function adjustReverbLabel(reverb, reverbamt) {
   const reverbElement = document.getElementById(`${reverb.name}`);
   reverbElement.textContent = `Current ${reverb}: ${reverbamt}`;
@@ -203,18 +211,18 @@ function onResults(results) {
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
   canvasCtx.scale(-1, 1); // Flip the canvas horizontally
   canvasCtx.translate(-canvasElement.width, 0); // Move the canvas back to the original position
-  canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-  if (results.multiHandLandmarks && results.multiHandedness) {
+  canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height); // draw the video frame to canvas
+  if (results.multiHandLandmarks && results.multiHandedness) { // run if hands are detected
     const handsData = results.multiHandLandmarks.map((landmarks, index) => ({
       landmarks: smoothLandmarks(landmarks, results.multiHandedness[index].label),
       label: results.multiHandedness[index].label
     }));
 
-      handsData.forEach((handData, handIndex) => {
-        const handLabel = handData.label === 'Left' ? 'Hand 1 (Right)' : 'Hand 2 (Left)';
+      handsData.forEach((handData, handIndex) => { // run for each hand
+        const handLabel = handData.label === 'Left' ? 'Hand 1 (Right)' : 'Hand 2 (Left)'; // assign left or right
         const landmarks = handData.landmarks;
 
-        if (landmarks.length >= 18)
+        if (landmarks.length >= 18) // run if enough landmarks are detected
         {
           const handColour = (handData.label === 'Left' && isPlayer2Playing) || (handData.label === 'Right' && isPlayer1Playing) ? '#00FF00' : '#FF0000';
           drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: handColour, lineWidth: 5 });
@@ -222,7 +230,7 @@ function onResults(results) {
 
           const poses = detectFingerPoses(landmarks);
 
-          if (!poses.indexFingerUp) {
+          if (!poses.indexFingerUp) { // debugging functions (can be uncommented to debug)
             //console.log(`${handLabel} index finger is down`);
           }
           if (!poses.middleFingerUp) {
@@ -235,7 +243,7 @@ function onResults(results) {
             //console.log(`${handLabel} pinky finger is down`);
           }
           if (!poses.indexFingerUp && !poses.middleFingerUp && !poses.ringFingerUp && !poses.pinkyFingerUp) {
-            console.log(`${handLabel} all fingers down`);
+            console.log(`${handLabel} all fingers down`); // logic for play/pause
             if (handData.label === 'Left') {
               if (!wasHand2Closed) {
                 if (isPlayer2Playing) {
@@ -266,7 +274,7 @@ function onResults(results) {
               wasHand1Closed = false;
             }
             if (!poses.thumbOut) {
-              console.log(`${handLabel} thumb is in`);
+              console.log(`${handLabel} thumb is in`); // logic for skipping track
               if (handData.label === 'Left') {
                 if (!wasThumbIn2) {
                   currentTrackIndex2 = changeTrack(player2, tracks2, currentTrackIndex2, handLabel);
@@ -286,15 +294,15 @@ function onResults(results) {
               }
             }
           }
-          if (handData.label === 'Left') {
+          if (handData.label === 'Left') {  // logic for reverb
             adjustVolume(volumeNode2, landmarks);
             applyFilters(lowPassFilter2, midPassFilter2, highPassFilter2, poses);
             if (frameCount % 3 === 0) {
-              previousWristPosition['Left'] = landmarks[0];
+              previousWristPosition['Left'] = landmarks[0]; // store wrist position every 3 frames
             }
             if (previousWristPosition['Left']) {
               const movement = calculateHorizontalMovement(landmarks[0], previousWristPosition['Left']);
-              adjustReverbDecay(reverb2, movement);
+              adjustReverbDecay(reverb2, movement); // adjust reverb based on difference between current position and stored position
             }
             previousLandmarks['Left'] = landmarks;
           } else {
@@ -319,7 +327,7 @@ function onResults(results) {
 
 
 const hands = new Hands({locateFile: (file) => {
-  return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+  return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`; // load model from file
 }});
 hands.setOptions({
   maxNumHands: 2,
